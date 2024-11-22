@@ -51,17 +51,19 @@ pub type Controls {
   Controls(
     queue:List(shared.Song),
     volume:Float,
-    search:String
+    search:String,
+    is_playing:Bool
   )
 }
 
 pub fn init_controls() {
-  Controls([],starting_vol,"")
+  Controls([],starting_vol,"",False)
 }
 
 pub type Msg {
   Play(shared.Song)
-  End
+  Resume
+  Pause
   IncreaseVol(by:Float)
   DecreaseVol(by:Float)
   SearchLibrary(String)
@@ -71,10 +73,16 @@ pub type Msg {
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
     Play(song) -> {
-      document_audio("audio-controls") |> io.debug |> debug_audio
       #(Model(..model,controls:Controls(..model.controls,queue:list.append(model.controls.queue,[song]))),effect.none())
     }
-    End ->  #(Model(..model,controls:Controls(..model.controls,queue:list.drop(model.controls.queue,1))),effect.none())
+    Resume -> {
+      set_playing(document_audio("audio-controls"),True)
+      #(Model(..model,controls:Controls(..model.controls,is_playing:True)),effect.none())
+    }
+    Pause -> {
+      set_playing(document_audio("audio-controls"),False)
+      #(Model(..model,controls:Controls(..model.controls,is_playing:False)),effect.none())
+    }
     IncreaseVol(by) -> {
       let vol = model.controls.volume +. by
       set_volume(document_audio("audio-controls"),vol)
@@ -89,18 +97,20 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       io.debug(value)
       #(Model(..model,controls:Controls(..model.controls,search:value)),effect.none())
     }
-    Skip(optional_song) -> {
-      case optional_song {
-        Some(song) -> #(Model(..model,controls:Controls(..model.controls,queue:list.filter(model.controls.queue,fn(queue_song) { !shared.song_is_equal(song,queue_song) }))),effect.none())
-        None -> {
-          let new_queue = list.drop(model.controls.queue,1)
-          case list.first(new_queue) {
-            Ok(song) ->  set_src(document_audio("audio-controls"),song_src(song))
-            Error(_) ->  reset_audio(document_audio("audio-controls"))
-          }
-          #(Model(..model,controls:Controls(..model.controls,queue:new_queue)),effect.none())
-        }
+    Skip(optional_song) -> skip(model,optional_song)
+  }
+}
+
+fn skip(model,optional_song) {
+  case optional_song {
+    Some(song) -> #(Model(..model,controls:Controls(..model.controls,queue:list.filter(model.controls.queue,fn(queue_song) { !shared.song_is_equal(song,queue_song) }))),effect.none())
+    None -> {
+      let new_queue = list.drop(model.controls.queue,1)
+      case list.first(new_queue) {
+        Ok(song) ->  set_src(document_audio("audio-controls"),song_src(song))
+        Error(_) ->  reset_audio(document_audio("audio-controls"))
       }
+      #(Model(..model,controls:Controls(..model.controls,queue:new_queue)),effect.none())
     }
   }
 }
@@ -125,7 +135,7 @@ pub fn view(model: Model) -> Element(Msg) {
       html.div([attribute.class("grid grid-cols-6 gap-5 overflow-y-scroll")],
         dict.values(model.songs)
         |> list.filter(fn(song) {
-              song_filter(song,model.controls.search)
+            song_filter(song,model.controls.search)
         })
         |> list.map(song_view)
       ),
@@ -155,14 +165,14 @@ pub fn search_view(model: Model) -> Element(Msg) {
 
 pub fn on_end() {
   use _ <- attribute.on("ended")
-  Ok(End)
+  Ok(Skip(None))
 }
 
 pub fn control_pannel(model: Model) -> element.Element(Msg) {
   io.debug("re render")
   let song = list.first(model.controls.queue)
   html.div([attribute.class("sticky top-[100vh]")],[
-    html.div([attribute.class("flex flex-row")],[
+    html.div([attribute.class("flex flex-row gap-5")],[
       html.button([event.on_click(IncreaseVol(0.1))],[html.text("+")]),
       html.div([],[html.text(float.to_string(model.controls.volume))]),
       html.button([event.on_click(DecreaseVol(0.1))],[html.text("-")]),
@@ -197,8 +207,11 @@ fn queue_view(model:Model) {
     html.text("queue"),
     html.div([attribute.class("flex flex-col gap-2")],list.index_map(model.controls.queue,fn(song,i) {
       html.div([],[
-        html.text(string.append(int.to_string(i+1),". ")),
-        html.text(song.name)
+        html.div([],[
+          html.text(string.append(int.to_string(i+1),". ")),
+          html.text(song.name),
+        ]),
+        html.button([event.on_click(Skip(Some(song)))],[html.text("skip")])
       ])
     }))
   ])
@@ -222,9 +235,11 @@ fn debug_audio(audio:Audio) -> Audio
 @external(javascript, "./audio.mjs", "setVolume")
 fn set_volume(audio:Audio,volume:Float) -> Audio
 
+@external(javascript, "./audio.mjs", "setVolume")
+fn set_playing(audio:Audio,playing:Bool) -> Audio
+
 @external(javascript, "./audio.mjs", "setSrc")
 fn set_src(audio:Audio,song:String) -> Audio
-
 
 @external(javascript, "./audio.mjs", "resetAudio")
 fn reset_audio(audio:Audio) -> Audio
