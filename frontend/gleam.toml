@@ -22,6 +22,7 @@ gleam_json = ">= 1.0.1 and < 2.0.0"
 shared = { path = "../shared" }
 plinth = ">= 0.5.1 and < 1.0.0"
 
+
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
 lustre_dev_tools = ">= 1.6.0 and < 2.0.0"

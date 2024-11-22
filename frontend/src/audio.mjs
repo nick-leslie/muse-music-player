@@ -7,8 +7,8 @@ export function documentAudio(id) {
   return document.getElementById(id)
 }
 
-export function setSrc(audio) {
-  audio.src = src;
+export function setSrc(audio,src) {
+  audio.setAttribute("src",src)
   return audio
 }
 /**

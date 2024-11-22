@@ -19,7 +19,7 @@ import gleam/uri
 import gleam/option.{Some,None}
 import gleam/string
 import gleam/json
-const starting_vol:Float = 0.2
+pub const starting_vol:Float = 0.2
 
 pub fn main() {
   let assert Ok(json_string) =
@@ -37,80 +37,84 @@ pub fn main() {
 
 fn init(inital_play_list) -> #(Model, Effect(Msg)) {
   document_audio("audio-controls") |> set_volume(starting_vol)
-  #(Model(inital_play_list,init_controls()),effect.none())
+  #(Model(inital_play_list,[],starting_vol,"",False,False),effect.none())
 }
 
 pub type Model {
   Model(
     songs:dict.Dict(String,shared.Song),
-    controls:Controls
-  )
-}
-
-pub type Controls {
-  Controls(
     queue:List(shared.Song),
     volume:Float,
     search:String,
-    is_playing:Bool
+    is_playing:Bool,
+    is_looping:Bool
   )
-}
-
-pub fn init_controls() {
-  Controls([],starting_vol,"",False)
 }
 
 pub type Msg {
   Play(shared.Song)
   Resume
   Pause
-  IncreaseVol(by:Float)
-  DecreaseVol(by:Float)
+  SetVol(vol:option.Option(Float))
   SearchLibrary(String)
+  End
   Skip(option.Option(shared.Song))
+  Loop(should:Bool)
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   case msg {
     Play(song) -> {
-      #(Model(..model,controls:Controls(..model.controls,queue:list.append(model.controls.queue,[song]))),effect.none())
+      #(Model(..model,queue:list.append(model.queue,[song])),effect.none())
     }
     Resume -> {
       set_playing(document_audio("audio-controls"),True)
-      #(Model(..model,controls:Controls(..model.controls,is_playing:True)),effect.none())
+      #(Model(..model,is_playing:True),effect.none())
     }
     Pause -> {
       set_playing(document_audio("audio-controls"),False)
-      #(Model(..model,controls:Controls(..model.controls,is_playing:False)),effect.none())
+      #(Model(..model,is_playing:False),effect.none())
     }
-    IncreaseVol(by) -> {
-      let vol = model.controls.volume +. by
-      set_volume(document_audio("audio-controls"),vol)
-      #(Model(..model,controls:Controls(..model.controls,volume:vol)), effect.none())
-    }
-    DecreaseVol(by) -> {
-      let vol = model.controls.volume -. by
-      set_volume(document_audio("audio-controls"),vol)
-      #(Model(..model,controls:Controls(..model.controls,volume:vol)), effect.none())
+    SetVol(vol) -> {
+      case vol {
+        Some(vol) -> {
+          set_volume(document_audio("audio-controls"),vol)
+          #(Model(..model,volume:vol),effect.none())
+        }
+        None -> {
+          let vol = document_audio("audio-controls").volume
+          #(Model(..model,volume:vol),effect.none())
+        }
+      }
     }
     SearchLibrary(value) -> {
       io.debug(value)
-      #(Model(..model,controls:Controls(..model.controls,search:value)),effect.none())
+      #(Model(..model,search:value),effect.none())
     }
     Skip(optional_song) -> skip(model,optional_song)
+    End -> {
+      case model.is_looping {
+        True -> #(model,effect.none())
+        False -> skip(model,None)
+      }
+    }
+    Loop(should) -> {
+      #(Model(..model,is_looping:should),effect.none())
+    }
   }
 }
 
 fn skip(model,optional_song) {
   case optional_song {
-    Some(song) -> #(Model(..model,controls:Controls(..model.controls,queue:list.filter(model.controls.queue,fn(queue_song) { !shared.song_is_equal(song,queue_song) }))),effect.none())
+    Some(song) -> #(Model(..model,queue:list.filter(model.queue,fn(queue_song) { !shared.song_is_equal(song,queue_song) })),effect.none())
     None -> {
-      let new_queue = list.drop(model.controls.queue,1)
+      let new_queue = list.drop(model.queue,1)
+      io.debug(new_queue)
       case list.first(new_queue) {
         Ok(song) ->  set_src(document_audio("audio-controls"),song_src(song))
         Error(_) ->  reset_audio(document_audio("audio-controls"))
       }
-      #(Model(..model,controls:Controls(..model.controls,queue:new_queue)),effect.none())
+      #(Model(..model,queue:new_queue),effect.none())
     }
   }
 }
@@ -131,11 +135,11 @@ pub fn view(model: Model) -> Element(Msg) {
   html.div([attribute.class("px-5 h-screen flex flex-row gap-5")],[
     queue_view(model),
     html.div([attribute.class("flex flex-col")],[
-      search_view(model),
+      search_view(),
       html.div([attribute.class("grid grid-cols-6 gap-5 overflow-y-scroll")],
         dict.values(model.songs)
         |> list.filter(fn(song) {
-            song_filter(song,model.controls.search)
+            song_filter(song,model.search)
         })
         |> list.map(song_view)
       ),
@@ -150,7 +154,7 @@ fn song_filter(song:shared.Song,current_search:String) -> Bool {
 }
 //search todo
 
-pub fn search_view(model: Model) -> Element(Msg) {
+pub fn search_view() -> Element(Msg) {
   html.div([attribute.class("w-full p-2")],[
     html.input([attribute.class("w-full rounded-lg p-2 border-2"),attribute.placeholder("Search"), event.on_input(fn(value) {
         SearchLibrary(value)
@@ -165,34 +169,53 @@ pub fn search_view(model: Model) -> Element(Msg) {
 
 pub fn on_end() {
   use _ <- attribute.on("ended")
-  Ok(Skip(None))
+  Ok(End)
+}
+
+pub fn on_vol_change() {
+  use _ <- attribute.on("volumechange")
+  Ok(SetVol(None))
 }
 
 pub fn control_pannel(model: Model) -> element.Element(Msg) {
   io.debug("re render")
-  let song = list.first(model.controls.queue)
+  let song = list.first(model.queue)
   html.div([attribute.class("sticky top-[100vh]")],[
     html.div([attribute.class("flex flex-row gap-5")],[
-      html.button([event.on_click(IncreaseVol(0.1))],[html.text("+")]),
-      html.div([],[html.text(float.to_string(model.controls.volume))]),
-      html.button([event.on_click(DecreaseVol(0.1))],[html.text("-")]),
+      html.button([event.on_click(SetVol(Some(model.volume +. 0.01)))],[html.text("+")]),
+      html.div([],[html.text(float.to_string(model.volume))]),
+      html.button([event.on_click(SetVol(Some(model.volume -. 0.01)))],[html.text("-")]),
       html.button([event.on_click(Skip(None))],[html.text("skip")]),
+      html.button([event.on_click(Loop(!model.is_looping))],[
+        html.text("loop")
+      ])
+      // play_pause(model)
     ]),
     case song {
       Ok(song) -> html.div([],[
-        html.h1([],[html.text(string.append("now playing:",song.name))]),
+        html.h1([],[html.text(string.append("now playing: ",song.name))]),
       ])
       Error(_) -> html.div([],[html.text("please select play song")])
     },
     html.audio([
       on_end()
+      ,on_vol_change()
       ,attribute.id("audio-controls")
+      ,attribute.loop(model.is_looping)
       ,attribute.autoplay(True)
       ,attribute.controls(True)
       ,add_song_src(song)
       ],[])
     ])
 }
+
+fn play_pause(model:Model) {
+  case model.is_playing {
+    True -> html.button([event.on_click(Pause)],[html.text("pause")])
+    False -> html.button([event.on_click(Resume)],[html.text("play")])
+  }
+}
+
 //
 fn add_song_src(song:Result(shared.Song,Nil))  {
   case song {
@@ -205,7 +228,7 @@ fn add_song_src(song:Result(shared.Song,Nil))  {
 fn queue_view(model:Model) {
   html.div([attribute.class("flex flex-col gap-2 h-full basis-1/4")],[
     html.text("queue"),
-    html.div([attribute.class("flex flex-col gap-2")],list.index_map(model.controls.queue,fn(song,i) {
+    html.div([attribute.class("flex flex-col gap-2")],list.index_map(model.queue,fn(song,i) {
       html.div([],[
         html.div([],[
           html.text(string.append(int.to_string(i+1),". ")),
@@ -221,7 +244,9 @@ fn song_src(song:shared.Song) {
   string.append("/song/" ,uri.percent_encode(song.name))
 }
 
-type Audio
+type Audio {
+  Audio(volume:Float)
+}
 
 @external(javascript, "./audio.mjs", "audio")
 fn audio() -> Audio
