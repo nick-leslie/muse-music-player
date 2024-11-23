@@ -2,6 +2,7 @@ import gleam/json
 import gleam/io
 import gleam/dynamic
 import decode/zero
+import gleam/dict
 
 
 pub type Song  {
@@ -16,6 +17,16 @@ pub fn decode_song(data:dynamic.Dynamic) {
   }
   zero.run(data,decoder)
  }
+
+pub fn decode_float(data:dynamic.Dynamic,feild:string) {
+  let decoder = {
+    use value <- zero.field(feild,zero.float)
+    zero.success(value)
+  }
+  zero.run(data,decoder)
+}
+
+
 
  pub fn encode_song(song:Song) {
    json.object([

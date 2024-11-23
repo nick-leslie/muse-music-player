@@ -14,7 +14,7 @@ import mist.{type Connection, type ResponseData}
 import lustre/attribute
 import wisp
 import wisp/wisp_mist
-import frontend.{type Model}
+import frontend.{type Model,starting_vol}
 import gleam/uri
 import gleam/list
 import simplifile
@@ -79,7 +79,7 @@ fn encode_all_songs(songs) {
 }
 
 fn home(ctx:Context) {
-  let model = frontend.Model(ctx.songs,frontend.init_controls())
+  let model = frontend.Model(ctx.songs,[],starting_vol,"",False,False,False)
     let content = // piped into from frontend
       frontend.view(model)
       |> page_scaffold(encode_all_songs(ctx.songs))
@@ -92,7 +92,7 @@ fn home(ctx:Context) {
     )
 }
 
-fn get_thumbnails() {
+fn get_thumbnails(song) {
   todo
   //"metadata_block_picture"
 }

@@ -37,7 +37,7 @@ pub fn main() {
 
 fn init(inital_play_list) -> #(Model, Effect(Msg)) {
   document_audio("audio-controls") |> set_volume(starting_vol)
-  #(Model(inital_play_list,[],starting_vol,"",False,False),effect.none())
+  #(Model(inital_play_list,[],starting_vol,"",False,False,False),effect.none())
 }
 
 pub type Model {
@@ -47,7 +47,8 @@ pub type Model {
     volume:Float,
     search:String,
     is_playing:Bool,
-    is_looping:Bool
+    is_looping:Bool,
+    is_infinite:Bool
   )
 }
 
@@ -60,6 +61,7 @@ pub type Msg {
   End
   Skip(option.Option(shared.Song))
   Loop(should:Bool)
+  Infinite(should:Bool)
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
@@ -93,6 +95,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
     Skip(optional_song) -> skip(model,optional_song)
     End -> {
+      io.debug(model.is_looping)
+      io.debug(model.is_infinite)
+
       case model.is_looping {
         True -> #(model,effect.none())
         False -> skip(model,None)
@@ -101,20 +106,52 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     Loop(should) -> {
       #(Model(..model,is_looping:should),effect.none())
     }
+    Infinite(should) -> {
+      #(Model(..model,is_infinite:should),effect.none())
+    }
   }
 }
 
 fn skip(model,optional_song) {
+  io.debug(model)
   case optional_song {
     Some(song) -> #(Model(..model,queue:list.filter(model.queue,fn(queue_song) { !shared.song_is_equal(song,queue_song) })),effect.none())
     None -> {
       let new_queue = list.drop(model.queue,1)
       io.debug(new_queue)
       case list.first(new_queue) {
-        Ok(song) ->  set_src(document_audio("audio-controls"),song_src(song))
-        Error(_) ->  reset_audio(document_audio("audio-controls"))
+        Ok(song) ->  {
+          set_src(document_audio("audio-controls"),song_src(song))
+          #(Model(..model,queue:new_queue),effect.none())
+        }
+        Error(_) -> {
+          case model.is_infinite {
+            False-> {
+              reset_audio(document_audio("audio-controls"))
+              #(Model(..model,queue:new_queue),effect.none())
+            }
+            True -> {
+              io.debug(model.queue)
+              let songs = dict.values(model.songs)
+              let songs = list.drop(songs,int.random(list.length(songs)))
+              io.debug("below should be all songs with the start cut off")
+              io.debug(songs)
+              case songs {
+                [song,..] -> {
+                  let new_queue = [song]
+                  set_src(document_audio("audio-controls"),song_src(song))
+                  #(Model(..model,queue:new_queue),effect.none())
+                }
+                [] -> {
+                  let assert Ok(song) = list.first(songs)
+                  set_src(document_audio("audio-controls"),song_src(song))
+                  #(Model(..model,queue:[song]),effect.none())
+                }
+              }
+            }
+          }
+        }
       }
-      #(Model(..model,queue:new_queue),effect.none())
     }
   }
 }
@@ -188,6 +225,9 @@ pub fn control_pannel(model: Model) -> element.Element(Msg) {
       html.button([event.on_click(Skip(None))],[html.text("skip")]),
       html.button([event.on_click(Loop(!model.is_looping))],[
         html.text("loop")
+      ]),
+      html.button([event.on_click(Infinite(!model.is_infinite))],[
+        html.text("infinite")
       ])
       // play_pause(model)
     ]),
