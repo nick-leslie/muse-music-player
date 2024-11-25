@@ -1,3 +1,4 @@
+import gleam/bit_array
 import gleam/json
 import gleam/option.{None,Some}
 import gleam/dict
@@ -18,6 +19,7 @@ import frontend.{type Model,starting_vol}
 import gleam/uri
 import gleam/list
 import simplifile
+import file_streams/file_stream
 
 pub type Context {
   Context(songs:dict.Dict(String,shared.Song))
@@ -25,8 +27,7 @@ pub type Context {
 
 fn static_middleware(req: wisp.Request, fun: fn() -> wisp.Response) -> wisp.Response {
   let assert Ok(priv) = wisp.priv_directory("backend")
-  io.debug(priv)
-  wisp.serve_static(req, under: "/static", from: priv, next: fun) |> io.debug
+  wisp.serve_static(req, under: "/static", from: priv, next: fun)
 }
 
 pub fn handle_request(req:wisp.Request,ctx:Context) -> wisp.Response {
@@ -68,10 +69,15 @@ fn serve_song(song:shared.Song) {
 
 fn find_songs(path:String)  {
  use files <- result.try(simplifile.get_files(path))
- Ok(files |> list.filter(fn(song) { string.contains(song,"mp3") || string.contains(song,"opus")}) |> list.map(fn(path) {
+ let songs = files
+  |> list.filter(fn(song) { string.contains(song,"mp3") || string.contains(song,"opus")})
+  |> list.map(fn(path) {
     let assert Ok(name) = list.last(string.split(path,"/"))
     #(name,shared.Song(name,path))
- }) |> dict.from_list)
+ })
+ let assert Ok(song) =  list.first(songs)
+ get_thumbnails(song.1) |> io.debug
+ Ok(songs |> dict.from_list)
 }
 
 fn encode_all_songs(songs) {
@@ -92,9 +98,47 @@ fn home(ctx:Context) {
     )
 }
 
-fn get_thumbnails(song) {
-  todo
+fn get_thumbnails(song:shared.Song) {
+  use stream <- result.try(file_stream.open_read(song.path))
+  let val = find_metadata(stream) |> io.debug
+  //todo decode the bytes to find a valid image
+  use first_frame <- result.try(file_stream.read_bytes(stream,32))
+  decode_base_64_byte_array(first_frame) |> io.debug
+  use second_frame <- result.try(file_stream.read_bytes(stream,32))
+  decode_base_64_byte_array(second_frame) |> io.debug
+  use third_frame <- result.try(file_stream.read_bytes(stream,32))
+  decode_base_64_byte_array(third_frame) |> io.debug
+  val
   //"metadata_block_picture"
+}
+
+fn decode_base_64_byte_array(byte_array) {
+  result.unwrap(bit_array.to_string(byte_array),"") |> bit_array.base64_decode()
+}
+
+fn find_null_terminator(stream) {
+
+}
+
+fn find_metadata(stream) {
+  case file_stream.read_bytes(stream,1) {
+    Ok(<<"M">>) -> {
+
+      io.debug("hit")
+      let bytes = file_stream.read_bytes(stream,22)
+      // string.from_utf_codepoints(bytes)
+          case bytes {
+            Ok(<<"ETADATA_BLOCK_PICTURE=":utf8>>) -> Ok("found")
+            _ -> find_metadata(stream)
+          }
+        }
+    Error(e) -> {
+      Error(e)
+    }
+    _ -> {
+      find_metadata(stream)
+    }
+  }
 }
 
 fn page_scaffold(
@@ -109,6 +153,32 @@ fn page_scaffold(
         attribute.name("viewport"),
       ]),
       html.title([], "muse"),
+      html.link([
+               attribute.href("https://fonts.googleapis.com"),
+               attribute.rel("preconnect"),
+             ]),
+             html.link([
+               attribute.attribute("crossorigin", ""),
+               attribute.href("https://fonts.gstatic.com"),
+               attribute.rel("preconnect"),
+             ]),
+             html.link([
+               attribute.rel("stylesheet"),
+               attribute.href("https://fonts.googleapis.com/css2?family=Forum&display=swap"),
+      ]),
+      html.link([
+                attribute.href("https://fonts.googleapis.com"),
+                attribute.rel("preconnect"),
+              ]),
+              html.link([
+                attribute.attribute("crossorigin", ""),
+                attribute.href("https://fonts.gstatic.com"),
+                attribute.rel("preconnect"),
+              ]),
+              html.link([
+                attribute.rel("stylesheet"),
+                attribute.href("https://fonts.googleapis.com/css2?family=Forum&family=Quicksand:wght@300..700&display=swap"),
+              ]),
       html.script(
         [attribute.src("/static/static/frontend.mjs"), attribute.type_("module")],
         init_json,

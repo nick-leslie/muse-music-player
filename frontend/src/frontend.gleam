@@ -112,10 +112,18 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
   }
 }
 
-fn skip(model,optional_song) {
+fn skip(model:Model,optional_song) {
   io.debug(model)
   case optional_song {
-    Some(song) -> #(Model(..model,queue:list.filter(model.queue,fn(queue_song) { !shared.song_is_equal(song,queue_song) })),effect.none())
+    Some(song) -> {
+      let new_queue = list.filter(model.queue,fn(queue_song) { !shared.song_is_equal(song,queue_song) })
+      case new_queue {
+        [] -> infinite_skip_or_reset(model,new_queue)
+        _ -> {
+          #(Model(..model,queue:new_queue),effect.none())
+        }
+      }
+    }
     None -> {
       let new_queue = list.drop(model.queue,1)
       io.debug(new_queue)
@@ -125,37 +133,37 @@ fn skip(model,optional_song) {
           #(Model(..model,queue:new_queue),effect.none())
         }
         Error(_) -> {
-          case model.is_infinite {
-            False-> {
-              reset_audio(document_audio("audio-controls"))
-              #(Model(..model,queue:new_queue),effect.none())
-            }
-            True -> {
-              io.debug(model.queue)
-              let songs = dict.values(model.songs)
-              let songs = list.drop(songs,int.random(list.length(songs)))
-              io.debug("below should be all songs with the start cut off")
-              io.debug(songs)
-              case songs {
-                [song,..] -> {
-                  let new_queue = [song]
-                  set_src(document_audio("audio-controls"),song_src(song))
-                  #(Model(..model,queue:new_queue),effect.none())
-                }
-                [] -> {
-                  let assert Ok(song) = list.first(songs)
-                  set_src(document_audio("audio-controls"),song_src(song))
-                  #(Model(..model,queue:[song]),effect.none())
-                }
-              }
-            }
-          }
+          infinite_skip_or_reset(model,new_queue)
         }
       }
     }
   }
 }
 
+pub fn infinite_skip_or_reset(model:Model,new_queue) {
+  case model.is_infinite {
+    False-> {
+      reset_audio(document_audio("audio-controls"))
+      #(Model(..model,queue:new_queue),effect.none())
+    }
+    True -> {
+      let songs = dict.values(model.songs)
+      let songs = list.drop(songs,int.random(list.length(songs)))
+      case songs {
+        [song,..] -> {
+          let new_queue = [song]
+          set_src(document_audio("audio-controls"),song_src(song))
+          #(Model(..model,queue:new_queue),effect.none())
+        }
+        [] -> {
+          let assert Ok(song) = list.first(songs)
+          set_src(document_audio("audio-controls"),song_src(song))
+          #(Model(..model,queue:[song]),effect.none())
+        }
+      }
+    }
+  }
+}
 
 
 pub fn song_view(song:shared.Song) {
@@ -169,7 +177,7 @@ pub fn song_view(song:shared.Song) {
 
 //todo figure out this css
 pub fn view(model: Model) -> Element(Msg) {
-  html.div([attribute.class("px-5 h-screen flex flex-row gap-5")],[
+  html.div([attribute.class("px-5 h-screen flex flex-row gap-5 bg-eerie-black text-tea-rose-(red) font-quicksand")],[
     queue_view(model),
     html.div([attribute.class("flex flex-col")],[
       search_view(),
@@ -193,7 +201,7 @@ fn song_filter(song:shared.Song,current_search:String) -> Bool {
 
 pub fn search_view() -> Element(Msg) {
   html.div([attribute.class("w-full p-2")],[
-    html.input([attribute.class("w-full rounded-lg p-2 border-2"),attribute.placeholder("Search"), event.on_input(fn(value) {
+    html.input([attribute.class("w-full rounded-lg p-2 border-2 border-tea-rose-(red)"),attribute.placeholder("Search"), event.on_input(fn(value) {
         SearchLibrary(value)
     })])
   ])
@@ -216,6 +224,7 @@ pub fn on_vol_change() {
 
 pub fn control_pannel(model: Model) -> element.Element(Msg) {
   io.debug("re render")
+  io.debug(model.is_infinite)
   let song = list.first(model.queue)
   html.div([attribute.class("sticky top-[100vh]")],[
     html.div([attribute.class("flex flex-row gap-5")],[
@@ -223,10 +232,10 @@ pub fn control_pannel(model: Model) -> element.Element(Msg) {
       html.div([],[html.text(float.to_string(model.volume))]),
       html.button([event.on_click(SetVol(Some(model.volume -. 0.01)))],[html.text("-")]),
       html.button([event.on_click(Skip(None))],[html.text("skip")]),
-      html.button([event.on_click(Loop(!model.is_looping))],[
+      html.button([attribute.classes([#("font-bold",model.is_looping)]),event.on_click(Loop(!model.is_looping))],[
         html.text("loop")
       ]),
-      html.button([event.on_click(Infinite(!model.is_infinite))],[
+      html.button([attribute.classes([#("font-bold",model.is_infinite)]),event.on_click(Infinite(!model.is_infinite))],[
         html.text("infinite")
       ])
       // play_pause(model)
@@ -264,7 +273,7 @@ fn add_song_src(song:Result(shared.Song,Nil))  {
   }
 }
 
-
+//border-2 p-2 border-tea-rose-(red)
 fn queue_view(model:Model) {
   html.div([attribute.class("flex flex-col gap-2 h-full basis-1/4")],[
     html.text("queue"),
