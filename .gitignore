@@ -1,2 +1,5 @@
 backend/priv/static
 frontend/priv/static
+
+*.opus
+*.jpg
