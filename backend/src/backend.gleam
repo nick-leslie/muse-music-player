@@ -5,7 +5,6 @@ import gleam/dict
 import gleam/string
 import gleam/io
 import gleam/result
-import shared
 import gleam/http/response
 import gleam/bytes_builder
 import gleam/erlang/process
@@ -20,6 +19,8 @@ import gleam/uri
 import gleam/list
 import simplifile
 import file_streams/file_stream
+import opus/thumbnail
+import shared
 
 pub type Context {
   Context(songs:dict.Dict(String,shared.Song))
@@ -63,6 +64,7 @@ pub fn main() {
 }
 
 fn serve_song(song:shared.Song) {
+  // todo move playback serverside
   wisp.ok()
   |> wisp.file_download(song.name,song.path)
 }
@@ -75,8 +77,8 @@ fn find_songs(path:String)  {
     let assert Ok(name) = list.last(string.split(path,"/"))
     #(name,shared.Song(name,path))
  })
- let assert Ok(song) =  list.first(songs)
- get_thumbnails(song.1) |> io.debug
+ let assert Ok(song) =  list.first(list.shuffle(songs))
+ thumbnail.get_thumbnails(song.1) |> io.debug
  Ok(songs |> dict.from_list)
 }
 
@@ -96,49 +98,6 @@ fn home(ctx:Context) {
       content
       |> element.to_document_string_builder(),
     )
-}
-
-fn get_thumbnails(song:shared.Song) {
-  use stream <- result.try(file_stream.open_read(song.path))
-  let val = find_metadata(stream) |> io.debug
-  //todo decode the bytes to find a valid image
-  use first_frame <- result.try(file_stream.read_bytes(stream,32))
-  decode_base_64_byte_array(first_frame) |> io.debug
-  use second_frame <- result.try(file_stream.read_bytes(stream,32))
-  decode_base_64_byte_array(second_frame) |> io.debug
-  use third_frame <- result.try(file_stream.read_bytes(stream,32))
-  decode_base_64_byte_array(third_frame) |> io.debug
-  val
-  //"metadata_block_picture"
-}
-
-fn decode_base_64_byte_array(byte_array) {
-  result.unwrap(bit_array.to_string(byte_array),"") |> bit_array.base64_decode()
-}
-
-fn find_null_terminator(stream) {
-
-}
-
-fn find_metadata(stream) {
-  case file_stream.read_bytes(stream,1) {
-    Ok(<<"M">>) -> {
-
-      io.debug("hit")
-      let bytes = file_stream.read_bytes(stream,22)
-      // string.from_utf_codepoints(bytes)
-          case bytes {
-            Ok(<<"ETADATA_BLOCK_PICTURE=":utf8>>) -> Ok("found")
-            _ -> find_metadata(stream)
-          }
-        }
-    Error(e) -> {
-      Error(e)
-    }
-    _ -> {
-      find_metadata(stream)
-    }
-  }
 }
 
 fn page_scaffold(

@@ -148,7 +148,7 @@ pub fn infinite_skip_or_reset(model:Model,new_queue) {
     }
     True -> {
       let songs = dict.values(model.songs)
-      let songs = list.drop(songs,int.random(list.length(songs)))
+      let songs = list.shuffle(songs)
       case songs {
         [song,..] -> {
           let new_queue = [song]
