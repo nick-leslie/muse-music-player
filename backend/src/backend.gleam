@@ -87,7 +87,7 @@ fn encode_all_songs(songs) {
 }
 
 fn home(ctx:Context) {
-  let model = frontend.Model(ctx.songs,[],starting_vol,"",False,False,False)
+  let model = frontend.Model(ctx.songs,[],[],starting_vol,"",False,False,False,False)
     let content = // piped into from frontend
       frontend.view(model)
       |> page_scaffold(encode_all_songs(ctx.songs))

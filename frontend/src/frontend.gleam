@@ -37,15 +37,17 @@ pub fn main() {
 
 fn init(inital_play_list) -> #(Model, Effect(Msg)) {
   document_audio("audio-controls") |> set_volume(starting_vol)
-  #(Model(inital_play_list,[],starting_vol,"",False,False,False),effect.none())
+  #(Model(inital_play_list,[],[],starting_vol,"",False,False,False,False),effect.none())
 }
 
 pub type Model {
   Model(
     songs:dict.Dict(String,shared.Song),
     queue:List(shared.Song),
+    history:List(shared.Song),
     volume:Float,
     search:String,
+    history_open:Bool,
     is_playing:Bool,
     is_looping:Bool,
     is_infinite:Bool
@@ -62,6 +64,7 @@ pub type Msg {
   Skip(option.Option(shared.Song))
   Loop(should:Bool)
   Infinite(should:Bool)
+  ToggleHistory(toggle:Bool)
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
@@ -95,8 +98,6 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
     Skip(optional_song) -> skip(model,optional_song)
     End -> {
-      io.debug(model.is_looping)
-      io.debug(model.is_infinite)
 
       case model.is_looping {
         True -> #(model,effect.none())
@@ -108,6 +109,9 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     }
     Infinite(should) -> {
       #(Model(..model,is_infinite:should),effect.none())
+    }
+    ToggleHistory(toggle) -> {
+      #(Model(..model,history_open:toggle),effect.none())
     }
   }
 }
@@ -130,7 +134,8 @@ fn skip(model:Model,optional_song) {
       case list.first(new_queue) {
         Ok(song) ->  {
           set_src(document_audio("audio-controls"),song_src(song))
-          #(Model(..model,queue:new_queue),effect.none())
+          let assert Ok(last_song) = list.first(model.queue) // this is ok bc we know we just played a song
+          #(Model(..model,queue:new_queue,history:list.append(model.history,[last_song])),effect.none())
         }
         Error(_) -> {
           infinite_skip_or_reset(model,new_queue)
@@ -143,8 +148,9 @@ fn skip(model:Model,optional_song) {
 pub fn infinite_skip_or_reset(model:Model,new_queue) {
   case model.is_infinite {
     False-> {
+      let assert Ok(last_song) = list.first(model.queue) // this is ok bc we know we just played a song
       reset_audio(document_audio("audio-controls"))
-      #(Model(..model,queue:new_queue),effect.none())
+      #(Model(..model,queue:new_queue,history:list.append(model.history,[last_song])),effect.none())
     }
     True -> {
       let songs = dict.values(model.songs)
@@ -152,13 +158,12 @@ pub fn infinite_skip_or_reset(model:Model,new_queue) {
       case songs {
         [song,..] -> {
           let new_queue = [song]
+          let assert Ok(last_song) = list.first(model.queue) // this is ok bc we know we just played a song
           set_src(document_audio("audio-controls"),song_src(song))
-          #(Model(..model,queue:new_queue),effect.none())
+          #(Model(..model,queue:new_queue,history:list.append(model.history,[last_song])),effect.none())
         }
         [] -> {
-          let assert Ok(song) = list.first(songs)
-          set_src(document_audio("audio-controls"),song_src(song))
-          #(Model(..model,queue:[song]),effect.none())
+          panic as "you have no songs"
         }
       }
     }
@@ -177,10 +182,11 @@ pub fn song_view(song:shared.Song) {
 
 //todo figure out this css
 pub fn view(model: Model) -> Element(Msg) {
-  html.div([attribute.class("px-5 h-screen flex flex-row gap-5 bg-eerie-black text-tea-rose-(red) font-quicksand")],[
+  html.div([attribute.class("px-5 h-screen flex flex-row gap-5 bg bg-eerie-black text-tea-rose-(red) font-quicksand")],[
     queue_view(model),
     html.div([attribute.class("flex flex-col")],[
       search_view(),
+
       html.div([attribute.class("grid grid-cols-6 gap-5 overflow-y-scroll")],
         dict.values(model.songs)
         |> list.filter(fn(song) {
@@ -190,8 +196,25 @@ pub fn view(model: Model) -> Element(Msg) {
       ),
       control_pannel(model),
     ]),
+    history_view(model)
   ])
 }
+
+fn history_view(model:Model) {
+  case model.history_open {
+    True -> {
+      html.div([attribute.class("flex flex-col gap-5 w-fit overflow-scroll")],[
+          html.button([event.on_click(ToggleHistory(False))],[html.text("Close History")]),
+          html.div([],list.map(model.history,song_view))
+        ]
+      )
+    }
+    False -> html.div([],[
+      html.button([event.on_click(ToggleHistory(True))],[html.text("Open History")])
+    ])
+  }
+}
+
 
 fn song_filter(song:shared.Song,current_search:String) -> Bool {
   //todo generate similar strings
