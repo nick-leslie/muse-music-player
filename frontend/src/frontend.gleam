@@ -19,6 +19,9 @@ import gleam/uri
 import gleam/option.{Some,None}
 import gleam/string
 import gleam/json
+import lustre_websocket
+
+
 pub const starting_vol:Float = 0.2
 
 pub fn main() {
@@ -37,7 +40,7 @@ pub fn main() {
 
 fn init(inital_play_list) -> #(Model, Effect(Msg)) {
   document_audio("audio-controls") |> set_volume(starting_vol)
-  #(Model(inital_play_list,[],[],starting_vol,"",False,False,False,False),effect.none())
+  #(Model(inital_play_list,[],[],starting_vol,"",False,False,False,False,None),lustre_websocket.init("ws://localhost:3000/healthcheck", fn(msg) { io.debug(WsWrapper(msg))}))
 }
 
 pub type Model {
@@ -50,7 +53,8 @@ pub type Model {
     history_open:Bool,
     is_playing:Bool,
     is_looping:Bool,
-    is_infinite:Bool
+    is_infinite:Bool,
+    ws:option.Option(lustre_websocket.WebSocket)
   )
 }
 
@@ -65,6 +69,7 @@ pub type Msg {
   Loop(should:Bool)
   Infinite(should:Bool)
   ToggleHistory(toggle:Bool)
+  WsWrapper(lustre_websocket.WebSocketEvent)
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
@@ -113,8 +118,31 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
     ToggleHistory(toggle) -> {
       #(Model(..model,history_open:toggle),effect.none())
     }
+    WsWrapper(event) -> handle_websocket(model,event)
   }
 }
+
+pub fn handle_websocket(model,ws_msg) {
+  case ws_msg {
+    lustre_websocket.OnOpen(socket) ->  {
+      io.debug("hello world")
+      io.debug(socket)
+      #(Model(..model, ws: Some(socket)), lustre_websocket.send(socket, "client-init"))
+    }
+    lustre_websocket.OnTextMessage(msg) -> {
+      io.debug(msg)
+      #(model,effect.none())
+    }
+    lustre_websocket.OnBinaryMessage(msg) -> todo as "either-or"
+    lustre_websocket.OnClose(reason) -> {
+      io.debug(reason)
+      #(Model(..model, ws: None), effect.none())
+    }
+    lustre_websocket.InvalidUrl -> panic
+  }
+}
+
+
 
 fn skip(model:Model,optional_song) {
   io.debug(model)
@@ -135,7 +163,7 @@ fn skip(model:Model,optional_song) {
         Ok(song) ->  {
           set_src(document_audio("audio-controls"),song_src(song))
           let assert Ok(last_song) = list.first(model.queue) // this is ok bc we know we just played a song
-          #(Model(..model,queue:new_queue,history:list.append(model.history,[last_song])),effect.none())
+          #(Model(..model,queue:new_queue,history:list.append([last_song],model.history)),effect.none())
         }
         Error(_) -> {
           infinite_skip_or_reset(model,new_queue)
@@ -150,7 +178,7 @@ pub fn infinite_skip_or_reset(model:Model,new_queue) {
     False-> {
       let assert Ok(last_song) = list.first(model.queue) // this is ok bc we know we just played a song
       reset_audio(document_audio("audio-controls"))
-      #(Model(..model,queue:new_queue,history:list.append(model.history,[last_song])),effect.none())
+      #(Model(..model,queue:new_queue,history:list.append([last_song],model.history)),effect.none())
     }
     True -> {
       let songs = dict.values(model.songs)
@@ -160,7 +188,7 @@ pub fn infinite_skip_or_reset(model:Model,new_queue) {
           let new_queue = [song]
           let assert Ok(last_song) = list.first(model.queue) // this is ok bc we know we just played a song
           set_src(document_audio("audio-controls"),song_src(song))
-          #(Model(..model,queue:new_queue,history:list.append(model.history,[last_song])),effect.none())
+          #(Model(..model,queue:new_queue,history:list.append([last_song],model.history)),effect.none())
         }
         [] -> {
           panic as "you have no songs"
@@ -340,3 +368,6 @@ fn set_src(audio:Audio,song:String) -> Audio
 
 @external(javascript, "./audio.mjs", "resetAudio")
 fn reset_audio(audio:Audio) -> Audio
+
+@external(javascript, "./audio.mjs", "wsTest")
+fn test_ws() -> String

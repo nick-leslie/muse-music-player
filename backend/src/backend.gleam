@@ -10,6 +10,7 @@ import gleam/bytes_builder
 import gleam/erlang/process
 import lustre/element
 import lustre/element/html.{html}
+import gleam/http/request.{type Request}
 import mist.{type Connection, type ResponseData}
 import lustre/attribute
 import wisp
@@ -21,6 +22,7 @@ import simplifile
 import file_streams/file_stream
 import opus/thumbnail
 import shared
+import websocket
 
 pub type Context {
   Context(songs:dict.Dict(String,shared.Song))
@@ -48,6 +50,16 @@ pub fn handle_request(req:wisp.Request,ctx:Context) -> wisp.Response {
     _ ->  { io.debug("dropped through")  wisp.not_found()}
   }
 }
+
+pub fn handle_con(handler,websocket_handler,secret_key_base) {
+  fn(req) {
+    case request.path_segments(req) {
+      ["healthcheck"] -> websocket_handler(req)
+      _ -> wisp_mist.handler(handler,secret_key_base)(req)
+    }
+  }
+}
+
 pub fn main() {
   let assert Ok(songs) = find_songs("/home/nickl/Music")
   wisp.configure_logger()
@@ -55,7 +67,7 @@ pub fn main() {
 
   let handler = handle_request(_, Context(songs))
   //mist_handler(handle_request,secret_key_base)
-  let assert Ok(_) = wisp_mist.handler(handler,secret_key_base)
+  let assert Ok(_) = handle_con(handler,websocket.socket_init(),secret_key_base)
     |> mist.new
     |> mist.port(3000)
     |> mist.start_http
@@ -87,7 +99,7 @@ fn encode_all_songs(songs) {
 }
 
 fn home(ctx:Context) {
-  let model = frontend.Model(ctx.songs,[],[],starting_vol,"",False,False,False,False)
+  let model = frontend.Model(ctx.songs,[],[],starting_vol,"",False,False,False,False,None)
     let content = // piped into from frontend
       frontend.view(model)
       |> page_scaffold(encode_all_songs(ctx.songs))

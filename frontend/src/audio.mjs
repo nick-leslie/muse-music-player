@@ -42,3 +42,12 @@ export function setVolume(audio,volume) {
     audio.volume = volume;
   }
 }
+
+
+export function wsTest() {
+  ws = new WebSocket("ws://localhost:3000/healthcheck")
+  ws.onmessage = () => {
+    console.log("if this works im gonna be so sad")
+  }
+  return "gaming"
+}

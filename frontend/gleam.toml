@@ -21,6 +21,7 @@ lustre_http = ">= 0.5.2 and < 1.0.0"
 gleam_json = ">= 1.0.1 and < 3.0.0"
 shared = { path = "../shared" }
 plinth = ">= 0.5.1 and < 1.0.0"
+lustre_websocket = ">= 0.7.6 and < 1.0.0"
 
 
 [dev-dependencies]
