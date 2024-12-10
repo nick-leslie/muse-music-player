@@ -1,3 +1,5 @@
+import gleam/http
+import gleam/http
 import gleam/bit_array
 import gleam/json
 import gleam/option.{None,Some}
@@ -28,7 +30,7 @@ import websocket
 const heart_beat = 10
 
 pub type Context {
-  Context(songs:dict.Dict(String,shared.Song))
+  Context(songs:dict.Dict(String,shared.Song),music_path:String)
 }
 
 fn static_middleware(req: wisp.Request, fun: fn() -> wisp.Response) -> wisp.Response {
@@ -39,6 +41,7 @@ fn static_middleware(req: wisp.Request, fun: fn() -> wisp.Response) -> wisp.Resp
 pub fn handle_request(req:wisp.Request,ctx:Context) -> wisp.Response {
   // use <- cors_middleware(req)
   use <- static_middleware(req)
+  r
   case wisp.path_segments(req) {
     // Home
     [] -> home(ctx)
@@ -49,8 +52,27 @@ pub fn handle_request(req:wisp.Request,ctx:Context) -> wisp.Response {
         Error(e) -> { io.debug(e)  wisp.not_found() }
       }
     }
+    ["playlist"] -> playlist_route(req,ctx.music_path)
     // Any non-matching routes
     _ ->  { io.debug("dropped through")  wisp.not_found()}
+  }
+}
+
+pub fn playlist_route(req:wisp.Request,dir:String) {
+  case req.method {
+    http.Post -> {
+      use json <- wisp.require_json(req)
+      case shared.decode_playlist(json) {
+          Ok(playlist) ->  {
+            case m3u.serlize(playlist.songs) |> simplifile.write(to: string.concat([dir,"/",playlist.name])) {
+                Ok(_) ->  wisp.ok()
+                Error(_) -> wisp.internal_server_error()
+            }
+          }
+          Error(_) -> wisp.bad_request()
+      }
+    }
+    _ -> wisp.method_not_allowed([http.Post])
   }
 }
 
@@ -65,14 +87,10 @@ pub fn handle_con(handler,websocket_handler,secret_key_base) {
 
 pub fn main() {
   let assert Ok(songs) = find_songs("/home/nickl/Music")
-  let playlist_string = m3u.serlize(dict.values(songs))
-  let assert Ok(Nil) = simplifile.write("./playlist.m3u",playlist_string)
-  let assert Ok(playlist_string) = simplifile.read("./playlist.m3u")
-  io.debug(m3u.deserlize(playlist_string))
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
 
-  let handler = handle_request(_, Context(songs))
+  let handler = handle_request(_, Context(songs,"/home/nickl/Music"))
   //mist_handler(handle_request,secret_key_base)
   let assert Ok(_) = handle_con(handler,websocket.socket_init(heart_beat),secret_key_base)
     |> mist.new
@@ -99,6 +117,17 @@ fn find_songs(path:String)  {
  let assert Ok(song) =  list.first(list.shuffle(songs))
  thumbnail.get_thumbnails(song.1) |> io.debug
  Ok(songs |> dict.from_list)
+}
+
+fn find_playlists(path:String) {
+   use files <-  result.try(simplifile.get_files(path))
+   files
+   |> list.filter(fn(song) { string.contains(song,"m3u") || string.contains(song,"m3u8")})
+   |> list.map(fn(playlist_path) {
+     use data <-  result.try(simplifile.read(playlist_path))
+     Ok(m3u.deserlize(data))
+   })
+   |> result.all
 }
 
 fn encode_all_songs(songs) {

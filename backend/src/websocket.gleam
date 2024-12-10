@@ -23,20 +23,19 @@ pub fn socket_init(seconds:Int) {
       },
       handler:fn(optional_pid,conn,msg) {
         case msg {
-              mist.Closed | mist.Shutdown -> {
-                io.debug("sadness")
-                case optional_pid {
-                  option.Some(pid) -> process.kill(pid)
-                  option.None -> Nil
-                }
-                actor.Stop(process.Normal)
+            mist.Closed | mist.Shutdown -> {
+              case optional_pid {
+                option.Some(pid) -> process.kill(pid)
+                option.None -> Nil
               }
-              mist.Text("client-init") -> {
-              let deamon_pid = process.start(heart_beat(conn,seconds),False)
+              actor.Stop(process.Normal)
+            }
+            mist.Text("client-init") -> {
+            let deamon_pid = process.start(heart_beat(conn,seconds),False)
 
-                actor.continue(option.Some(deamon_pid))
-              }
-              _ -> actor.continue(optional_pid)
+              actor.continue(option.Some(deamon_pid))
+            }
+            _ -> actor.continue(optional_pid)
         }
       }
     )

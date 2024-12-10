@@ -10,6 +10,21 @@ pub type Song  {
   SongWithLength(name:String,path:String,artist:String,length:Int)
 }
 
+pub type Playlist {
+  Playlist(name:String,path:String,songs:List(Song))
+}
+
+pub fn decode_playlist(data:dynamic.Dynamic) {
+  let decoder = {
+    use name <- zero.field("name",zero.string)
+    use path <- zero.field("path",zero.string)
+    use songs <- zero.field("songs",zero.list(zero.new_primitive_decoder(decode_song,Song("","",""))))
+    zero.success(Playlist(name,path,songs))
+  }
+  zero.run(data,decoder)
+ }
+
+
 pub fn decode_song(data:dynamic.Dynamic) {
   let decoder = {
     use name <- zero.field("name",zero.string)

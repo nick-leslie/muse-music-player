@@ -70,6 +70,9 @@ pub fn deserlize(input:String) -> Result(List(shared.Song),PlaylistDeserlizeErro
       |> io.debug
       |> result.all
     }
-    _ -> Error(MissingFirstTag)
+    value -> {
+      io.debug(value)
+      Error(MissingFirstTag)
+    }
   }
 }
