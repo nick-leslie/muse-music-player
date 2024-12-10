@@ -6,14 +6,16 @@ import gleam/dict
 
 
 pub type Song  {
-  Song(name:String,path:String)
+  Song(name:String,path:String,artist:String)
+  SongWithLength(name:String,path:String,artist:String,length:Int)
 }
 
 pub fn decode_song(data:dynamic.Dynamic) {
   let decoder = {
     use name <- zero.field("name",zero.string)
     use path <- zero.field("path",zero.string)
-    zero.success(Song(name,path))
+    use artist <- zero.field("artist",zero.string)
+    zero.success(Song(name,path,artist))
   }
   zero.run(data,decoder)
  }
@@ -31,7 +33,8 @@ pub fn decode_float(data:dynamic.Dynamic,feild:string) {
  pub fn encode_song(song:Song) {
    json.object([
      #("name",json.string(song.name)),
-     #("path",json.string(song.path))
+     #("path",json.string(song.path)),
+     #("artist",json.string(song.artist))
    ])
  }
 

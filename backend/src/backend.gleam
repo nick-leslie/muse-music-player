@@ -22,7 +22,10 @@ import simplifile
 import file_streams/file_stream
 import opus/thumbnail
 import shared
+import m3u
 import websocket
+
+const heart_beat = 10
 
 pub type Context {
   Context(songs:dict.Dict(String,shared.Song))
@@ -54,7 +57,7 @@ pub fn handle_request(req:wisp.Request,ctx:Context) -> wisp.Response {
 pub fn handle_con(handler,websocket_handler,secret_key_base) {
   fn(req) {
     case request.path_segments(req) {
-      ["healthcheck"] -> websocket_handler(req)
+      ["ws","healthcheck"] -> websocket_handler(req)
       _ -> wisp_mist.handler(handler,secret_key_base)(req)
     }
   }
@@ -62,12 +65,16 @@ pub fn handle_con(handler,websocket_handler,secret_key_base) {
 
 pub fn main() {
   let assert Ok(songs) = find_songs("/home/nickl/Music")
+  let playlist_string = m3u.serlize(dict.values(songs))
+  let assert Ok(Nil) = simplifile.write("./playlist.m3u",playlist_string)
+  let assert Ok(playlist_string) = simplifile.read("./playlist.m3u")
+  io.debug(m3u.deserlize(playlist_string))
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
 
   let handler = handle_request(_, Context(songs))
   //mist_handler(handle_request,secret_key_base)
-  let assert Ok(_) = handle_con(handler,websocket.socket_init(),secret_key_base)
+  let assert Ok(_) = handle_con(handler,websocket.socket_init(heart_beat),secret_key_base)
     |> mist.new
     |> mist.port(3000)
     |> mist.start_http
@@ -87,7 +94,7 @@ fn find_songs(path:String)  {
   |> list.filter(fn(song) { string.contains(song,"mp3") || string.contains(song,"opus")})
   |> list.map(fn(path) {
     let assert Ok(name) = list.last(string.split(path,"/"))
-    #(name,shared.Song(name,path))
+    #(name,shared.Song(name,path,"")) //todo add author parsing
  })
  let assert Ok(song) =  list.first(list.shuffle(songs))
  thumbnail.get_thumbnails(song.1) |> io.debug

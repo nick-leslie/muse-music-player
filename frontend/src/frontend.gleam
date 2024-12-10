@@ -40,7 +40,7 @@ pub fn main() {
 
 fn init(inital_play_list) -> #(Model, Effect(Msg)) {
   document_audio("audio-controls") |> set_volume(starting_vol)
-  #(Model(inital_play_list,[],[],starting_vol,"",False,False,False,False,None),lustre_websocket.init("ws://localhost:3000/healthcheck", fn(msg) { io.debug(WsWrapper(msg))}))
+  #(Model(inital_play_list,[],[],starting_vol,"",False,False,False,False,None),lustre_websocket.init("ws://localhost:3000/ws/healthcheck", fn(msg) { io.debug(WsWrapper(msg))}))
 }
 
 pub type Model {
@@ -231,9 +231,9 @@ pub fn view(model: Model) -> Element(Msg) {
 fn history_view(model:Model) {
   case model.history_open {
     True -> {
-      html.div([attribute.class("flex flex-col gap-5 w-fit overflow-scroll")],[
+      html.div([attribute.class("flex flex-col w-fit overflow-scroll")],[
           html.button([event.on_click(ToggleHistory(False))],[html.text("Close History")]),
-          html.div([],list.map(model.history,song_view))
+          html.div([attribute.class("gap-5")],list.map(model.history,song_view))
         ]
       )
     }
@@ -281,6 +281,7 @@ pub fn control_pannel(model: Model) -> element.Element(Msg) {
     html.div([attribute.class("flex flex-row gap-5")],[
       html.button([event.on_click(SetVol(Some(model.volume +. 0.01)))],[html.text("+")]),
       html.div([],[html.text(float.to_string(model.volume))]),
+      //html.input([attribute.type_("range"),attribute.value(float.to_string(model.volume *. 100.0)) , attribute.min("1"), attribute.max("100")]),
       html.button([event.on_click(SetVol(Some(model.volume -. 0.01)))],[html.text("-")]),
       html.button([event.on_click(Skip(None))],[html.text("skip")]),
       html.button([attribute.classes([#("font-bold",model.is_looping)]),event.on_click(Loop(!model.is_looping))],[

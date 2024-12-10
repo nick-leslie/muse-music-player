@@ -5,7 +5,9 @@ import gleam/option
 import gleam/otp/actor
 
 
-pub fn socket_init() {
+
+
+pub fn socket_init(seconds:Int) {
   fn (req) {
     mist.websocket(
       req,
@@ -30,7 +32,7 @@ pub fn socket_init() {
                 actor.Stop(process.Normal)
               }
               mist.Text("client-init") -> {
-              let deamon_pid = process.start(heart_beat(conn),False)
+              let deamon_pid = process.start(heart_beat(conn,seconds),False)
 
                 actor.continue(option.Some(deamon_pid))
               }
@@ -42,13 +44,13 @@ pub fn socket_init() {
 }
 
 
-pub fn heart_beat(conn) {
-    process.sleep(1000) // sleep for 5 seconds
+pub fn heart_beat(conn,seconds) {
+    process.sleep(seconds*1000) // sleep for 5 seconds
     case mist.send_text_frame(conn,"keep alive") {
       Error(_) -> {
         process.kill(process.self())
       }
       Ok(_) -> Nil
     }
-    heart_beat(conn)
+    heart_beat(conn,seconds)
 }
