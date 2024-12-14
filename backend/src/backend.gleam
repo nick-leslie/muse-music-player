@@ -1,4 +1,4 @@
-import gleam/http
+import gleam/string_tree
 import gleam/http
 import gleam/bit_array
 import gleam/json
@@ -41,7 +41,7 @@ fn static_middleware(req: wisp.Request, fun: fn() -> wisp.Response) -> wisp.Resp
 pub fn handle_request(req:wisp.Request,ctx:Context) -> wisp.Response {
   // use <- cors_middleware(req)
   use <- static_middleware(req)
-  r
+
   case wisp.path_segments(req) {
     // Home
     [] -> home(ctx)
@@ -59,17 +59,26 @@ pub fn handle_request(req:wisp.Request,ctx:Context) -> wisp.Response {
 }
 
 pub fn playlist_route(req:wisp.Request,dir:String) {
+  io.debug("creating playlist")
   case req.method {
     http.Post -> {
       use json <- wisp.require_json(req)
       case shared.decode_playlist(json) {
           Ok(playlist) ->  {
-            case m3u.serlize(playlist.songs) |> simplifile.write(to: string.concat([dir,"/",playlist.name])) {
-                Ok(_) ->  wisp.ok()
-                Error(_) -> wisp.internal_server_error()
+            let serlized_playlist = m3u.serlize(playlist.songs)
+            let path = string.concat([dir,"/",playlist.name,".m3u"])
+            case serlized_playlist |> simplifile.write(to: path) {
+              Ok(_) ->  wisp.json_response(string_tree.from_string(serlized_playlist),200)
+              Error(write_err) ->  {
+                io.debug(write_err)
+                wisp.internal_server_error()
+              }
             }
           }
-          Error(_) -> wisp.bad_request()
+          Error(err) ->  {
+            io.debug(err)
+            wisp.bad_request()
+          }
       }
     }
     _ -> wisp.method_not_allowed([http.Post])
@@ -135,7 +144,7 @@ fn encode_all_songs(songs) {
 }
 
 fn home(ctx:Context) {
-  let model = frontend.Model(ctx.songs,[],[],starting_vol,"",False,False,False,False,None)
+  let model = frontend.Model(ctx.songs,[],[],starting_vol,"",False,False,False,False,None,"")
     let content = // piped into from frontend
       frontend.view(model)
       |> page_scaffold(encode_all_songs(ctx.songs))

@@ -1,3 +1,4 @@
+import gleam/option
 import gleam/json
 import gleam/io
 import gleam/dynamic
@@ -11,18 +12,26 @@ pub type Song  {
 }
 
 pub type Playlist {
-  Playlist(name:String,path:String,songs:List(Song))
+  Playlist(name:String,songs:List(Song))
+  PlaylistWithPath(name:String,songs:List(Song),path:String)
 }
 
 pub fn decode_playlist(data:dynamic.Dynamic) {
   let decoder = {
     use name <- zero.field("name",zero.string)
-    use path <- zero.field("path",zero.string)
+    use path <- zero.optional_field("path","no path",zero.string)
     use songs <- zero.field("songs",zero.list(zero.new_primitive_decoder(decode_song,Song("","",""))))
-    zero.success(Playlist(name,path,songs))
+    zero.success(PlaylistWithPath(name,songs,path))
   }
   zero.run(data,decoder)
  }
+
+ pub fn encode_playlist(playlist:Playlist) {
+   json.object([
+     #("name",json.string(playlist.name)),
+     #("songs",json.array(playlist.songs,encode_song)),
+   ])
+  }
 
 
 pub fn decode_song(data:dynamic.Dynamic) {

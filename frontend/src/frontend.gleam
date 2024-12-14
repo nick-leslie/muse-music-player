@@ -1,3 +1,4 @@
+import lustre_http
 import gleam/float
 import gleam/queue
 import gleam/io
@@ -40,7 +41,7 @@ pub fn main() {
 
 fn init(inital_play_list) -> #(Model, Effect(Msg)) {
   document_audio("audio-controls") |> set_volume(starting_vol)
-  #(Model(inital_play_list,[],[],starting_vol,"",False,False,False,False,None),lustre_websocket.init("ws://localhost:3000/ws/healthcheck", fn(msg) { io.debug(WsWrapper(msg))}))
+  #(Model(inital_play_list,[],[],starting_vol,"",False,False,False,False,None,""),lustre_websocket.init("ws://localhost:3000/ws/healthcheck", fn(msg) { io.debug(WsWrapper(msg))}))
 }
 
 pub type Model {
@@ -54,7 +55,8 @@ pub type Model {
     is_playing:Bool,
     is_looping:Bool,
     is_infinite:Bool,
-    ws:option.Option(lustre_websocket.WebSocket)
+    ws:option.Option(lustre_websocket.WebSocket),
+    create_playlist_name:String
   )
 }
 
@@ -70,6 +72,13 @@ pub type Msg {
   Infinite(should:Bool)
   ToggleHistory(toggle:Bool)
   WsWrapper(lustre_websocket.WebSocketEvent)
+  CreatePlaylistRequest
+  UpdateCratePlayListName(name:String)
+  NetworkResponse(Result(NetworkRes,Nil))
+}
+
+pub type NetworkRes {
+  CreatedPlaylist
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
@@ -119,6 +128,26 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       #(Model(..model,history_open:toggle),effect.none())
     }
     WsWrapper(event) -> handle_websocket(model,event)
+    CreatePlaylistRequest -> {
+      io.debug("creating playlist")
+      let playlist  = shared.Playlist(model.create_playlist_name,model.history)
+      io.debug(playlist)
+      let json = shared.encode_playlist(playlist)
+      io.debug(json)
+      //todo update loading state
+      #(model, lustre_http.post("http://localhost:3000/playlist",json,lustre_http.expect_json(shared.decode_playlist,fn(res) {
+        io.debug(res)
+        NetworkResponse(Ok(CreatedPlaylist))
+      })))
+    }
+    NetworkResponse(res) -> {
+      io.debug(res)
+      #(model,effect.none())
+    }
+    UpdateCratePlayListName(name) -> {
+      io.debug(name)
+      #(Model(..model,create_playlist_name:name),effect.none())
+    }
   }
 }
 
@@ -233,7 +262,13 @@ fn history_view(model:Model) {
     True -> {
       html.div([attribute.class("flex flex-col w-fit overflow-scroll")],[
           html.button([event.on_click(ToggleHistory(False))],[html.text("Close History")]),
-          html.div([attribute.class("gap-5")],list.map(model.history,song_view))
+          html.div([attribute.class("gap-5")],list.map(model.history,song_view)),
+          html.div([],[
+            html.input([attribute.id("playlist-name"), attribute.class("w-full"),event.on_input(UpdateCratePlayListName)]),
+            html.button([attribute.class("w-full border border-rounded-2xl"),event.on_click(CreatePlaylistRequest)],[
+              html.text("Create playlist")
+            ])
+          ])
         ]
       )
     }
@@ -244,6 +279,7 @@ fn history_view(model:Model) {
 }
 
 
+
 fn song_filter(song:shared.Song,current_search:String) -> Bool {
   //todo generate similar strings
   string.contains(string.lowercase(song.name),string.lowercase(current_search))
@@ -252,7 +288,7 @@ fn song_filter(song:shared.Song,current_search:String) -> Bool {
 
 pub fn search_view() -> Element(Msg) {
   html.div([attribute.class("w-full p-2")],[
-    html.input([attribute.class("w-full rounded-lg p-2 border-2 border-tea-rose-(red)"),attribute.placeholder("Search"), event.on_input(fn(value) {
+    html.input([attribute.class("w-full  rounded-lg p-2 border-2 border-tea-rose-(red)"),attribute.placeholder("Search"), event.on_input(fn(value) {
         SearchLibrary(value)
     })])
   ])
