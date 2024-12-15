@@ -67,7 +67,7 @@ pub type Msg {
   SetVol(vol:option.Option(Float))
   SearchLibrary(String)
   End
-  Skip(option.Option(shared.Song))
+  Skip(option.Option(#(Int,shared.Song)))
   Loop(should:Bool)
   Infinite(should:Bool)
   ToggleHistory(toggle:Bool)
@@ -173,29 +173,36 @@ pub fn handle_websocket(model,ws_msg) {
 
 
 
-fn skip(model:Model,optional_song) {
+fn skip(model:Model,optional_song:option.Option(#(Int,shared.Song))) {
   io.debug(model)
   case optional_song {
     Some(song) -> {
-      let new_queue = list.filter(model.queue,fn(queue_song) { !shared.song_is_equal(song,queue_song) })
+      io.debug("test")
+      //todo bug here with filtering multiple songs
+      let new_queue = list.filter(model.queue,fn(queue_song) { !shared.song_is_equal(song.1,queue_song) })
       case new_queue {
-        [] -> infinite_skip_or_reset(model,new_queue)
+        [] ->  {
+          let model = Model(..model,history:list.append([song.1],model.history))
+          infinite_skip_or_reset(model,new_queue)
+        }
         _ -> {
           #(Model(..model,queue:new_queue),effect.none())
         }
       }
     }
     None -> {
-      let new_queue = list.drop(model.queue,1)
-      io.debug(new_queue)
-      case list.first(new_queue) {
-        Ok(song) ->  {
-          set_src(document_audio("audio-controls"),song_src(song))
-          let assert Ok(last_song) = list.first(model.queue) // this is ok bc we know we just played a song
-          #(Model(..model,queue:new_queue,history:list.append([last_song],model.history)),effect.none())
+      case model.queue {
+        [last_song,next_song,..new_queue] -> {
+          io.debug("hit")
+          set_src(document_audio("audio-controls"),song_src(next_song))
+          #(Model(..model,queue:list.append([next_song],new_queue),history:list.append([last_song],model.history)),effect.none())
         }
-        Error(_) -> {
-          infinite_skip_or_reset(model,new_queue)
+        [next_song] -> {
+          reset_audio(document_audio("audio-controls"))
+          #(Model(..model,queue:[],history:list.append([next_song],model.history)),effect.none())
+        }
+        [] -> {
+          infinite_skip_or_reset(model,[])
         }
       }
     }

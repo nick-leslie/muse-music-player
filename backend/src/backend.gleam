@@ -68,7 +68,10 @@ pub fn playlist_route(req:wisp.Request,dir:String) {
             let serlized_playlist = m3u.serlize(playlist.songs)
             let path = string.concat([dir,"/",playlist.name,".m3u"])
             case serlized_playlist |> simplifile.write(to: path) {
-              Ok(_) ->  wisp.json_response(string_tree.from_string(serlized_playlist),200)
+              Ok(_) ->  {
+                io.debug(path)
+                wisp.json_response(string_tree.from_string(serlized_playlist),200)
+              }
               Error(write_err) ->  {
                 io.debug(write_err)
                 wisp.internal_server_error()
