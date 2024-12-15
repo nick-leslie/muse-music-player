@@ -185,6 +185,10 @@ fn skip(model:Model,optional_song:option.Option(#(Int,shared.Song))) {
           let model = Model(..model,history:list.append([song.1],model.history))
           infinite_skip_or_reset(model,new_queue)
         }
+        _ if song.0 == 1 ->  {
+          #(Model(..model,queue:new_queue,history:list.append([song.1],model.history)),effect.none())
+
+        }
         _ -> {
           #(Model(..model,queue:new_queue),effect.none())
         }
