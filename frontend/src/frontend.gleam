@@ -185,7 +185,7 @@ fn skip(model:Model,optional_song:option.Option(#(Int,shared.Song))) {
           let model = Model(..model,history:list.append([song.1],model.history))
           infinite_skip_or_reset(model,new_queue)
         }
-        _ if song.0 == 1 ->  {
+        _ if song.0 == 0 ->  {
           #(Model(..model,queue:new_queue,history:list.append([song.1],model.history)),effect.none())
 
         }
@@ -382,7 +382,7 @@ fn queue_view(model:Model) {
           html.text(string.append(int.to_string(i+1),". ")),
           html.text(song.name),
         ]),
-        html.button([event.on_click(Skip(Some(song)))],[html.text("skip")])
+        html.button([event.on_click(Skip(Some(#(i,song))))],[html.text("skip")])
       ])
     }))
   ])
