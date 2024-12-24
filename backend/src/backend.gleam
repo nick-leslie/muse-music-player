@@ -8,7 +8,6 @@ import gleam/string
 import gleam/io
 import gleam/result
 import gleam/http/response
-import gleam/bytes_builder
 import gleam/erlang/process
 import lustre/element
 import lustre/element/html.{html}
@@ -17,20 +16,36 @@ import mist.{type Connection, type ResponseData}
 import lustre/attribute
 import wisp
 import wisp/wisp_mist
-import frontend.{type Model,starting_vol}
 import gleam/uri
 import gleam/list
 import simplifile
 import file_streams/file_stream
-import opus/thumbnail
+import frontend.{type Model,starting_vol}
 import shared
 import m3u
 import websocket
+import room
 
 const heart_beat = 10
 
 pub type Context {
   Context(songs:dict.Dict(String,shared.Song),music_path:String)
+}
+
+pub fn main() {
+  let assert Ok(songs) = find_songs("/home/nickl/Music")
+  // room.encode_song()
+  wisp.configure_logger()
+  let secret_key_base = wisp.random_string(64)
+
+  let handler = handle_request(_, Context(songs,"/home/nickl/Music"))
+  //mist_handler(handle_request,secret_key_base)
+  let assert Ok(_) = handle_con(handler,websocket.socket_init(heart_beat),secret_key_base)
+    |> mist.new
+    |> mist.port(3000)
+    |> mist.start_http
+
+  process.sleep_forever()
 }
 
 fn static_middleware(req: wisp.Request, fun: fn() -> wisp.Response) -> wisp.Response {
@@ -97,21 +112,6 @@ pub fn handle_con(handler,websocket_handler,secret_key_base) {
   }
 }
 
-pub fn main() {
-  let assert Ok(songs) = find_songs("/home/nickl/Music")
-  wisp.configure_logger()
-  let secret_key_base = wisp.random_string(64)
-
-  let handler = handle_request(_, Context(songs,"/home/nickl/Music"))
-  //mist_handler(handle_request,secret_key_base)
-  let assert Ok(_) = handle_con(handler,websocket.socket_init(heart_beat),secret_key_base)
-    |> mist.new
-    |> mist.port(3000)
-    |> mist.start_http
-
-  process.sleep_forever()
-}
-
 fn serve_song(song:shared.Song) {
   // todo move playback serverside
   wisp.ok()
@@ -127,7 +127,6 @@ fn find_songs(path:String)  {
     #(name,shared.Song(name,path,"")) //todo add author parsing
  })
  let assert Ok(song) =  list.first(list.shuffle(songs))
- thumbnail.get_thumbnails(song.1) |> io.debug
  Ok(songs |> dict.from_list)
 }
 

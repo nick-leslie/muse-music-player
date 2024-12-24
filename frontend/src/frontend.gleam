@@ -1,6 +1,5 @@
 import lustre_http
 import gleam/float
-import gleam/queue
 import gleam/io
 import gleam/list
 import shared
@@ -133,7 +132,6 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let playlist  = shared.Playlist(model.create_playlist_name,model.history)
       io.debug(playlist)
       let json = shared.encode_playlist(playlist)
-      io.debug(json)
       //todo update loading state
       #(model, lustre_http.post("http://localhost:3000/playlist",json,lustre_http.expect_json(shared.decode_playlist,fn(res) {
         io.debug(res)
@@ -180,6 +178,7 @@ fn skip(model:Model,optional_song:option.Option(#(Int,shared.Song))) {
       io.debug("test")
       //todo bug here with filtering multiple songs
       let new_queue = list.filter(model.queue,fn(queue_song) { !shared.song_is_equal(song.1,queue_song) })
+
       case new_queue {
         [] ->  {
           let model = Model(..model,history:list.append([song.1],model.history))
@@ -201,9 +200,9 @@ fn skip(model:Model,optional_song:option.Option(#(Int,shared.Song))) {
           set_src(document_audio("audio-controls"),song_src(next_song))
           #(Model(..model,queue:list.append([next_song],new_queue),history:list.append([last_song],model.history)),effect.none())
         }
-        [next_song] -> {
+        [_next_song] -> {
           reset_audio(document_audio("audio-controls"))
-          #(Model(..model,queue:[],history:list.append([next_song],model.history)),effect.none())
+          infinite_skip_or_reset(model,[])
         }
         [] -> {
           infinite_skip_or_reset(model,[])
@@ -271,9 +270,9 @@ pub fn view(model: Model) -> Element(Msg) {
 fn history_view(model:Model) {
   case model.history_open {
     True -> {
-      html.div([attribute.class("flex flex-col w-fit overflow-scroll")],[
+      html.div([attribute.class("flex flex-col gap-5 w-fit overflow-scroll")],[
           html.button([event.on_click(ToggleHistory(False))],[html.text("Close History")]),
-          html.div([attribute.class("gap-5")],list.map(model.history,song_view)),
+          html.div([],list.map(model.history,song_view)),
           html.div([],[
             html.input([attribute.id("playlist-name"), attribute.class("w-full"),event.on_input(UpdateCratePlayListName)]),
             html.button([attribute.class("w-full border border-rounded-2xl"),event.on_click(CreatePlaylistRequest)],[

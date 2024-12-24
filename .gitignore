@@ -1,5 +1,5 @@
 backend/priv/static
 frontend/priv/static
-
+gleam_erlexec
 *.opus
 *.jpg
