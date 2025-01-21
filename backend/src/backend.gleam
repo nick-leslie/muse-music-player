@@ -25,6 +25,7 @@ import shared
 import m3u
 import websocket
 import room
+import routes/songs
 
 const heart_beat = 10
 
@@ -34,6 +35,10 @@ pub type Context {
 
 pub fn main() {
   let assert Ok(songs) = find_songs("/home/nickl/Music")
+  // let assert Ok(song) = list.sample(dict.values(songs),1)
+  // |> list.first()
+  //songs.create_image_thumbnail(song)
+
   // room.encode_song()
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
@@ -63,7 +68,14 @@ pub fn handle_request(req:wisp.Request,ctx:Context) -> wisp.Response {
     ["song",name] ->  {
       let assert Ok(name) = uri.percent_decode(name)
       case dict.get(ctx.songs,name) {
-        Ok(song) ->  serve_song(song)
+        Ok(song) ->  songs.serve_song(song)
+        Error(e) -> { io.debug(e)  wisp.not_found() }
+      }
+    }
+    ["song",name,"thumbnail"] ->  {
+      let assert Ok(name) = uri.percent_decode(name)
+      case dict.get(ctx.songs,name) {
+        Ok(song) ->  songs.serve_thumbnail(song)
         Error(e) -> { io.debug(e)  wisp.not_found() }
       }
     }
@@ -112,11 +124,6 @@ pub fn handle_con(handler,websocket_handler,secret_key_base) {
   }
 }
 
-fn serve_song(song:shared.Song) {
-  // todo move playback serverside
-  wisp.ok()
-  |> wisp.file_download(song.name,song.path)
-}
 
 fn find_songs(path:String)  {
  use files <- result.try(simplifile.get_files(path))
@@ -126,7 +133,6 @@ fn find_songs(path:String)  {
     let assert Ok(name) = list.last(string.split(path,"/"))
     #(name,shared.Song(name,path,"")) //todo add author parsing
  })
- let assert Ok(song) =  list.first(list.shuffle(songs))
  Ok(songs |> dict.from_list)
 }
 
@@ -145,18 +151,19 @@ fn encode_all_songs(songs) {
   json.array(dict.values(songs),shared.encode_song) |> json.to_string
 }
 
+
 fn home(ctx:Context) {
   let model = frontend.Model(ctx.songs,[],[],starting_vol,"",False,False,False,False,None,"")
-    let content = // piped into from frontend
-      frontend.view(model)
-      |> page_scaffold(encode_all_songs(ctx.songs))
+  let content = // piped into from frontend
+    frontend.view(model)
+    |> page_scaffold(encode_all_songs(ctx.songs))
 
-    wisp.response(200)
-    |> wisp.set_header("Content-Type", "text/html")
-    |> wisp.html_body(
-      content
-      |> element.to_document_string_builder(),
-    )
+  wisp.response(200)
+  |> wisp.set_header("Content-Type", "text/html")
+  |> wisp.html_body(
+    content
+    |> element.to_document_string_builder(),
+  )
 }
 
 fn page_scaffold(

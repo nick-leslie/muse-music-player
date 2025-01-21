@@ -9,6 +9,7 @@ import gleam/dict
 pub type Song  {
   Song(name:String,path:String,artist:String)
   SongWithLength(name:String,path:String,artist:String,length:Int)
+
 }
 
 pub type Playlist {

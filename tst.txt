@@ -1,0 +1,10 @@
+[2K[?25h✅ [32mProject compiled successfully[39m
+[2K[?25h✅ [32mEsbuild already installed![39m
+[2K[?25h✅ [32mBundle produced at `./priv/static/frontend.mjs`[39m
+[2K[?25h✅ [32mTailwind already installed![39m
+[96m[1m
+Next Steps:
+[22m[39m
+[96m1. Be sure to update your root `index.html` file to include 
+   `<link rel='stylesheet' type='text/css' href='./priv/static/your_app.css' />`[39m
+[?25l[2K[35m⠋[39m Bundling with Tailwind[?25l[2K[35m⠙[39m Bundling with Tailwind[?25l[2K[35m⠹[39m Bundling with Tailwind[?25l[2K[35m⠸[39m Bundling with Tailwind[?25l[2K[35m⠼[39m Bundling with Tailwind[?25l[2K[35m⠴[39m Bundling with Tailwind[?25l[2K[35m⠦[39m Bundling with Tailwind[?25l[2K[35m⠧[39m Bundling with Tailwind[?25l[2K[35m⠇[39m Bundling with Tailwind[?25l[2K[35m⠏[39m Bundling with Tailwind[2K[?25h✅ [32mBundle produced at `./priv/static/frontend.css`[39m

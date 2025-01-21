@@ -46,7 +46,7 @@ fn init(inital_play_list) -> #(Model, Effect(Msg)) {
 pub type Model {
   Model(
     songs:dict.Dict(String,shared.Song),
-    queue:List(shared.Song),
+    queue:List(shared.Song), //todo seperate this TODO wrap the song in a uniceness struct
     history:List(shared.Song),
     volume:Float,
     search:String,
@@ -57,6 +57,10 @@ pub type Model {
     ws:option.Option(lustre_websocket.WebSocket),
     create_playlist_name:String
   )
+}
+
+pub type Diffrence(value) {
+  Diffrence(value:value,diffrence:Int)
 }
 
 pub type Msg {
@@ -134,12 +138,10 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
       let json = shared.encode_playlist(playlist)
       //todo update loading state
       #(model, lustre_http.post("http://localhost:3000/playlist",json,lustre_http.expect_json(shared.decode_playlist,fn(res) {
-        io.debug(res)
         NetworkResponse(Ok(CreatedPlaylist))
       })))
     }
     NetworkResponse(res) -> {
-      io.debug(res)
       #(model,effect.none())
     }
     UpdateCratePlayListName(name) -> {
@@ -239,9 +241,9 @@ pub fn infinite_skip_or_reset(model:Model,new_queue) {
 
 
 pub fn song_view(song:shared.Song) {
-  html.div([],[
+  html.div([attribute.class("px-5 py-2 border border-2")],[
     html.h2([],[html.text(song.name)]),
-    html.button([event.on_click(Play(song))],[
+    html.button([event.on_click(Play(song)),attribute.class("px-5 py-2 border border-2")],[
       html.text("Play!!!")
     ])
   ])
@@ -249,6 +251,7 @@ pub fn song_view(song:shared.Song) {
 
 //todo figure out this css
 pub fn view(model: Model) -> Element(Msg) {
+
   html.div([attribute.class("px-5 h-screen flex flex-row gap-5 bg bg-eerie-black text-tea-rose-(red) font-quicksand")],[
     queue_view(model),
     html.div([attribute.class("flex flex-col")],[
